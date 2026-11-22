@@ -1,0 +1,35 @@
+{
+  "accuracy": 0.6913696060037523,
+  "macro_f1": 0.6908186411197437,
+  "confusion_true_rows_pred_cols": [
+    [
+      391,
+      142
+    ],
+    [
+      187,
+      346
+    ]
+  ],
+  "routes": {
+    "cnn": {
+      "count": 577,
+      "fraction": 0.5412757973733584,
+      "accuracy": 0.8006932409012132
+    },
+    "transformer": {
+      "count": 163,
+      "fraction": 0.1529080675422139,
+      "accuracy": 0.6134969325153374
+    },
+    "fusion": {
+      "count": 326,
+      "fraction": 0.3058161350844278,
+      "accuracy": 0.5368098159509203
+    }
+  },
+  "best_epoch": 6,
+  "best_val_accuracy": 0.692307710647583,
+  "best_val_loss": 0.8854590058326721,
+  "tau": 0.8
+}

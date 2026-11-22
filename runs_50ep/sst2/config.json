@@ -1,0 +1,58 @@
+{
+  "dataset": "sst2",
+  "data_root": "dataset",
+  "split_dir": "prepared_seed42",
+  "output_dir": "runs_50ep",
+  "encoder": "scratch",
+  "model_name_or_path": "distilbert/distilbert-base-uncased",
+  "allow_download": false,
+  "device": "cpu",
+  "cpu_threads": 8,
+  "seed": 42,
+  "epochs": 50,
+  "batch_size": 256,
+  "max_length": 64,
+  "max_vocab": 20000,
+  "min_freq": 1,
+  "dim": 96,
+  "trans_dim": 48,
+  "heads": 4,
+  "depth": 2,
+  "dropout": 0.0,
+  "lr": 0.001,
+  "encoder_lr": 2e-05,
+  "weight_decay": 0.01,
+  "tau": 0.8,
+  "aux_weight": 0.4,
+  "calibration_weight": 0.1,
+  "device_used": "cpu",
+  "torch_version": "2.2.2",
+  "split_sizes": {
+    "train": 6909,
+    "validation": 872,
+    "test": 1821
+  },
+  "split_labels": {
+    "train": {
+      "1": 3605,
+      "0": 3304
+    },
+    "validation": {
+      "0": 428,
+      "1": 444
+    },
+    "test": {
+      "0": 912,
+      "1": 909
+    }
+  },
+  "model_args": {
+    "max_length": 64,
+    "dim": 96,
+    "trans_dim": 48,
+    "heads": 4,
+    "depth": 2,
+    "dropout": 0.0
+  },
+  "vocab_size": 13846
+}

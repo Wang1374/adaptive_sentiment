@@ -1,0 +1,17 @@
+# Data (large; regenerate locally)
+dataset/
+
+# Model weights and vocab/tokenizer artifacts
+*.pt
+*.pth
+runs*/**/vocab.json
+runs*/**/tokenizer/
+runs*/**/encoder_config/
+
+# Editor / Python caches
+.history/
+__pycache__/
+*.pyc
+.DS_Store
+.vscode/
+.idea/
