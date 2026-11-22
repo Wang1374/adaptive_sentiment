@@ -15,3 +15,6 @@ __pycache__/
 .DS_Store
 .vscode/
 .idea/
+
+# Keep the final result models
+!results/*/best_model.pt
