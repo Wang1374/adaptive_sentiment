@@ -1,5 +1,7 @@
 # Final results
 
+See [the detailed results report](../results.md) for confusion matrices, parameter counts, training histories, and interpretation, and [the methodology](../methodology.md) for the model and evaluation protocol.
+
 The best model for each dataset, selected by test accuracy across the experiments in `runs_*/`. Each folder is a complete run directory (`best_model.pt`, `vocab.json`, `config.json`, `history.csv`, `loss_curve.png`, `test_metrics.json`) and loads directly with `predict.py`.
 
 | Dataset | Source run | Test accuracy | Macro-F1 | Best epoch |
@@ -30,4 +32,4 @@ python predict.py --run-dir results/mr   --device cpu --text 'A lovely and movin
 python predict.py --run-dir results/sst2 --device cpu --text 'Boring and predictable.'
 ```
 
-Note: the model on each dataset was chosen by comparing test accuracy across runs, so these numbers are slightly optimistic relative to a strictly validation-only selection.
+Note: the model on each dataset was chosen by comparing test accuracy across runs, so these are exploratory results with potential selection optimism relative to strictly validation-only run selection. The amount of optimism has not been estimated.
