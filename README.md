@@ -1,57 +1,144 @@
-# 置信度感知自适应情感分析（MR / SST-2）
+# Confidence-Aware Adaptive Sentiment Analysis (MR / SST-2)
 
-使用 PyTorch 做英文正负情感分类。直接读取 SentiCSE 的 `mr/prepared_seed42` 和 `sst2/prepared_seed42` 下的 `train.csv`、`validation.csv`、`test.csv`，不重分数据。标签 `0=negative`，`1=positive`。
+A PyTorch implementation of binary English sentiment classification with TextCNN, TSSA, and one-dimensional Context Anchor Attention (CAA). Each example follows a confidence-based inference route: exit through the CNN, use the deeper TSSA branch, or fuse both representations with CAA.
 
-| 数据 | 训练 | 验证 | 测试 |
+Labels are `0 = negative` and `1 = positive`.
+
+## Data and evaluation protocol
+
+The project reads the existing SentiCSE classification splits without repartitioning them:
+
+```text
+dataset/
+  mr/prepared_seed42/
+    train.csv
+    validation.csv
+    test.csv
+  sst2/prepared_seed42/
+    train.csv
+    validation.csv
+    test.csv
+```
+
+Every CSV must contain `text` and `label` columns. Supply the dataset root with `--data-root`; raw datasets are excluded from Git.
+
+| Dataset | Training | Validation | Test |
 | --- | ---: | ---: | ---: |
 | MR | 8,530 | 1,066 | 1,066 |
 | SST-2 | 6,909 | 872 | 1,821 |
 
-这是直接监督的文本分类。参考工程的本地分割协议被保留，SentiCSE 的四元组对比学习、情感 MLM 和 Spearman 选模不用于此任务。MR 是本地分层划分，SST-2 是本地整理版；结果应和使用同一划分的实验比较。
+This is directly supervised text classification. It retains the reference project's local splits but does not use SentiCSE quadruplet contrastive learning, sentiment MLM, or Spearman-based checkpoint selection. MR uses a local stratified split, and SST-2 uses a locally prepared version. Compare these results with experiments that use the same splits.
 
-## 运行
+## Installation
 
-Python 3.10+。现有环境已安装依赖时，可跳过安装。Windows 用 `python` 或实际的 Python 可执行文件；服务器可通过 `--data-root` 改数据位置。
+Use Python 3.10 or later:
 
-```powershell
+```bash
 python -m pip install -r requirements.txt
-python train.py --dataset all --encoder scratch --epochs 8 --output-dir runs_offline
 ```
 
-`--dataset mr` 或 `--dataset sst2` 可单独训练。`--device auto` 自动选择 CUDA 或 CPU。离线模式的词表仅取训练集；编码器为随机初始化的小型双向 Transformer（BERT 风格），不使用外部预训练权重。若要运行 PDF 描述的预训练轻量 BERT 方案：
+For the optional pretrained encoder, also install:
 
-```powershell
+```bash
 python -m pip install -r requirements-pretrained.txt
-python train.py --dataset all --encoder pretrained --model-name-or-path 'C:\models\distilbert-base-uncased' --epochs 8 --batch-size 32 --output-dir runs_pretrained
 ```
 
-请把示例模型目录改为实际含权重和 tokenizer 的本地目录。也可以指定 `--model-name-or-path distilbert/distilbert-base-uncased --allow-download` 下载模型。预训练编码器以 `--encoder-lr` 微调；其余层用 `--lr`。
+## Predict with the included models
 
-训练和验证都使用 `tqdm` 显示进度、累计 loss 和 accuracy。每轮更新各数据集下的 `loss_curve.png` 和 `history.csv`。默认输出位置是项目内 `runs/`；如果已有同名数据集的实验，请给新实验指定新的 `--output-dir`。
+The `results/` directory contains complete scratch-encoder runs, including model weights and vocabularies:
 
-```powershell
-python predict.py --run-dir runs/mr --text 'A lovely and moving film.' --text 'Boring and predictable.'
+```bash
+python predict.py --run-dir results/mr --device cpu --text 'A lovely and moving film.' --text 'Boring and predictable.'
+python predict.py --run-dir results/sst2 --device cpu --text 'A thoughtful and entertaining story.'
 ```
 
-随项目保存的 `runs/` 是两套数据用 `--encoder scratch --epochs 6 --device cpu --seed 42` 的实跑结果。图中的两条曲线都是总损失；训练曲线是在逐步更新参数时累计的，验证曲线是每轮结束后用固定权重、关闭 dropout 算出的。
+Predictions are printed as JSON with the input text, sentiment label, softmax confidence, and route (`cnn`, `transformer`, or `fusion`). Prediction uses the run's saved threshold unless overridden with `--tau`.
 
-## 代码和路由
+| Dataset | Source run | Test accuracy | Macro-F1 | Best epoch |
+| --- | --- | ---: | ---: | ---: |
+| MR | `runs_v3/mr` | 76.17% | 76.15% | 95 |
+| SST-2 | `runs_last/sst2` | 81.11% | 81.10% | 56 |
 
-| 文件 | 负责内容 |
+Within each run, checkpoints were selected by validation accuracy, with validation loss as the tie-breaker. The final models in `results/` were then chosen by comparing test accuracy across runs, so these reported results are optimistic relative to strictly validation-only model selection. See [the final results documentation](results/README.md) for configurations and route statistics.
+
+## Train a scratch encoder
+
+The scratch encoder is a small, randomly initialized, bidirectional BERT-style Transformer. It runs offline, uses no pretrained weights, and builds its vocabulary from the training split only.
+
+```bash
+python train.py --data-root dataset --dataset all --encoder scratch --device auto --epochs 8 --output-dir runs_offline
+```
+
+Use `--dataset mr` or `--dataset sst2` to train one dataset. `--device auto` selects CUDA when available and otherwise uses CPU. The training command defaults to `--device cuda`, so explicitly use `--device cpu` or `--device auto` on machines without CUDA.
+
+The data-root default in `data.py` is a path from the original Windows environment. Pass `--data-root` to point to your own data. On Windows, use `python` or the path to your Python executable and adjust file paths as needed.
+
+Training defaults include 100 epochs, batch size 256, maximum sequence length 64, feature dimension 64, TSSA dimension 48, one head, two TSSA blocks, dropout 0.5, learning rate `1e-3`, weight decay `0.01`, seed 42, and routing threshold `tau=0.9`. The short example above overrides the epoch count for convenience.
+
+## Train a pretrained encoder
+
+To fine-tune a local lightweight BERT-family model, supply a directory containing its weights, configuration, and tokenizer:
+
+```bash
+python train.py --data-root dataset --dataset all --encoder pretrained --model-name-or-path /path/to/distilbert-base-uncased --device auto --epochs 8 --batch-size 32 --output-dir runs_pretrained
+```
+
+Alternatively, allow a download with `--model-name-or-path distilbert/distilbert-base-uncased --allow-download`. The pretrained encoder uses `--encoder-lr` (default `2e-5`); the remaining layers use `--lr`.
+
+## Architecture and routing
+
+| File | Responsibility |
 | --- | --- |
-| `data.py` | 读取三份 CSV，分词和动态补齐 |
-| `model.py` | TextCNN、降维 TSSA、1D CAA、动态路由与损失 |
-| `train.py` | 训练、验证选模、测试、曲线和结果记录 |
-| `predict.py` | 恢复模型并输出标签、置信度和路由 |
+| `data.py` | Read CSV splits, tokenize text, build the scratch vocabulary, and dynamically pad batches |
+| `model.py` | Implement the encoders, TextCNN, TSSA, 1D CAA, confidence routing, and training loss |
+| `train.py` | Train, select validation checkpoints, evaluate the test split, and save curves and metrics |
+| `predict.py` | Restore a saved run and output labels, confidence scores, and routes |
 
-正文先编码为 `[B, L, D]`。TextCNN 使用固定大小 `3/5/7` 的一维卷积核沿 token 轴提取不同跨度的特征。深层分支从编码器输出降维 `D → trans_dim`，使用模块 129 的 TSSA（增加 padding mask）和残差、前馈网络，再升回 `D`。TSSA 保留按头做 softmax、沿有效 token 计算二阶矩的做法，见 [ToST 官方实现](https://github.com/RobinWu218/ToST)。CAA 源自模块 083，改为一维局部平均和串联深度卷积，用逐 token、逐通道的 sigmoid 权重融合两路表示。三个分支共用分类头。所有池化、统计和卷积边界处理均考虑 padding。
+The encoder first produces token representations with shape `[B, L, D]`.
 
-置信度取二分类 logits 的最大 **softmax** 概率。推理规则逐样本执行：
+- **TextCNN:** One-dimensional convolutions with kernel sizes 3, 5, and 7 slide along the token axis to capture local patterns at different spans.
+- **TSSA:** The deeper branch projects `D` to `trans_dim`, applies TSSA blocks with padding masks, residual connections, and feed-forward layers, then projects back to `D`. The operator follows module 129, using softmax across heads and second-moment estimates over valid tokens. The source references the [official ToST implementation](https://github.com/RobinWu218/ToST).
+- **1D CAA:** Adapted from module 083, this branch uses local averaging and sequential depthwise convolutions to produce a sigmoid gate for each token and channel, fusing the CNN and TSSA representations.
 
-1. `C_cnn >= tau`：从 CNN 提前退出，不执行 TSSA 或 CAA。
-2. `C_cnn < tau`：执行 TSSA。若 `C_trans >= C_cnn`，用 TSSA 结果。
-3. 其余样本执行 1D CAA，用融合结果。
+All three branches share one classification head. Pooling, statistics, and convolution boundaries account for padding.
 
-`tau` 默认 `0.8`。训练用硬路由选出主任务 CE，但计算全部分支，通过三路辅助 CE 确保各分支收到监督；额外的多类 Brier 损失直接惩罚概率与真实类别向量的偏差。损失为 `主任务 CE + 0.4 × 三路平均辅助 CE + 0.1 × 三路平均 Brier`（可通过参数调整）。Brier 是校准目标，不能据此假定两个分支已充分校准。验证 loss 与训练使用同一目标，测试用真正的稀疏推理。更大的 `tau` 通常会让更多样本进入深层；比较阈值要用验证集，而非测试集。
+Confidence is the maximum **softmax** probability over the two sentiment logits. Inference routes each example independently:
 
-训练产物还包括 `best_model.pt`（按验证准确率选模，同分用验证 loss）、`config.json`、`test_metrics.json`（准确率、Macro-F1、混淆矩阵和三条路径的覆盖率/准确率），以及词表或 tokenizer/编码器配置。TSSA 算子本身不构造 `L × L` 注意力矩阵；前置 BERT 类编码器仍有常规注意力开销，整体速度需要实测。
+1. If `C_cnn >= tau`, return the CNN prediction without executing TSSA or CAA for that example.
+2. Otherwise, execute TSSA. If `C_trans >= C_cnn`, return the TSSA prediction.
+3. For the remaining examples, execute 1D CAA and return the fused prediction.
+
+The default threshold is `tau=0.9`. A larger threshold generally sends more examples to the deeper branch. Compare thresholds on validation data.
+
+TSSA itself does not construct an `L x L` token-attention matrix. The preceding BERT-style encoder still has conventional self-attention costs, so end-to-end speed must be measured.
+
+## Training objective
+
+Training computes all branches and uses hard routing to select the main-task logits. Auxiliary cross-entropy losses supervise all three branches. A multiclass Brier loss penalizes the difference between predicted probabilities and the one-hot target:
+
+```text
+loss = main_cross_entropy
+     + 0.4 * mean_branch_cross_entropy
+     + 0.1 * mean_branch_brier_loss
+```
+
+The weights are configurable with `--aux-weight` and `--calibration-weight`. Brier loss is a calibration objective; it does not guarantee that confidence scores from different branches are fully calibrated. Validation uses the same loss as training, while test evaluation uses sparse inference routing.
+
+## Saved artifacts and experiment history
+
+Training and validation display progress, cumulative loss, and accuracy with `tqdm`. Each dataset gets its own output subdirectory. Use a fresh `--output-dir` for every experiment; training rejects a nonempty run directory. The default output root is `runs/` inside the project.
+
+| Artifact | Contents |
+| --- | --- |
+| `best_model.pt` | Checkpoint with the highest validation accuracy; ties use lower validation loss |
+| `last_model.pt` | Most recent epoch's weights, overwritten after every epoch |
+| `config.json` | Run arguments, model configuration, split statistics, and environment details |
+| `history.csv` | Per-epoch training and validation loss, accuracy, and route fractions |
+| `loss_curve.png` | Training and validation total loss, updated after every epoch |
+| `test_metrics.json` | Test accuracy, Macro-F1, confusion matrix, route coverage and accuracy, and checkpoint-selection details |
+| `vocab.json` | Training vocabulary for the scratch encoder |
+| `tokenizer/`, `encoder_config/` | Tokenizer and encoder configuration for pretrained runs |
+
+The training loss curve accumulates values while parameters are updated. The validation curve is computed after each epoch with fixed weights and dropout disabled.
+
+The included `runs/` directory records earlier six-epoch CPU experiments with the scratch encoder and seed 42. Other `runs_*` directories preserve experiment configurations, curves, and metrics. Their weights and vocabularies are generally excluded from Git; use the complete runs in `results/` for inference.
